@@ -1,3 +1,5 @@
-getgenv().ownerNames = {"master10123123", "gx0", "Bbcdot0", "Clone1FFK", "myworstfeeling", "bloodrunningoverme", "adamabbasab", "mikegmtaest", "niyya_stjfu", "hajroazi", "PrettylittleSico_idk", "olidragon10", "4thacc_2", "blackkj3netherite", "adrieicylyn", "Xerphiux", "adrieicylyn", "RollerCoaster20105"}
+return {
+    7706960908, 987654321, 112233445, 223344556, 334455667
+}
 
-loadstring(game:HttpGet("https://raw.githubusercontent.com/yuvic123/asdwqe/refs/heads/main/awdwqeq"))()
+

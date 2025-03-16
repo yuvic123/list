@@ -186,4 +186,3 @@ async def on_message(message):
 # Run the Discord bot
 keep_alive()
 client.run(DISCORD_TOKEN)
-client.run(GITHUB_TOKEN)

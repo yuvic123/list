@@ -6,6 +6,8 @@ import re
 import os  # To access environment variables
 from keep_alive import keep_alive
 
+load_dotenv()
+
 # Initialize the bot
 intents = discord.Intents.default()
 intents.message_content = True

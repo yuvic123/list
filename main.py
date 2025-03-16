@@ -4,24 +4,20 @@ import requests
 import json
 import base64
 import re
-import os  # To access environment variables
+import os 
 from keep_alive import keep_alive
 
 load_dotenv()
 
-# Initialize the bot
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-# GitHub API URL for your new repository and file
 GITHUB_API_URL = "https://api.github.com/repos/yuvic123/list/contents/list"
 
-# Fetch tokens from environment variables (secrets)
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # GitHub token from environment variables
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")  # Discord token from environment variables
 
-# Allowed Discord IDs
 ALLOWED_USERS = [
     1279868613628657860,
     598460565387476992,
@@ -29,7 +25,6 @@ ALLOWED_USERS = [
     1197823319123165218
 ]
 
-# Function to update the file on GitHub
 def update_github_file(new_content, sha):
     updated_content = base64.b64encode(new_content.encode('utf-8')).decode('utf-8')
 
@@ -50,7 +45,6 @@ def update_github_file(new_content, sha):
     else:
         print(f"Failed to update file: {response.status_code} - {response.text}")
 
-# Function to get Roblox usernames
 def get_roblox_usernames(user_ids):
     url = "https://users.roblox.com/v1/users"
     data = {"userIds": user_ids}
@@ -65,7 +59,6 @@ def get_roblox_usernames(user_ids):
         print(f"Error fetching usernames: {e}")
         return {}
 
-# Listen for messages in Discord
 @client.event
 async def on_ready():
     print(f'Logged in as {client.user}')
@@ -86,7 +79,6 @@ async def on_message(message):
         await message.channel.send("❌ You don't have permission to use this command.")
         return
 
-    # Fetch the current file content
     response = requests.get(GITHUB_API_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"})
     if response.status_code != 200:
         await message.channel.send(f"❌ Error fetching file: {response.status_code} - {response.text}")
@@ -95,11 +87,9 @@ async def on_message(message):
     file_data = response.json()
     file_content = base64.b64decode(file_data["content"]).decode('utf-8')
 
-    # Extract existing IDs using regex
     existing_ids = re.findall(r'\d+', file_content)
     existing_ids = list(map(int, existing_ids))
 
-    # .add Command
     if message.content.startswith(".add "):
         try:
             target_id = int(message.content.split(" ")[1].strip())
@@ -113,7 +103,6 @@ async def on_message(message):
             existing_ids.append(target_id)
             await message.channel.send(f"✅ Added Roblox ID `{target_id}` to the list!")
 
-    # .remove Command
     elif message.content.startswith(".remove "):
         try:
             target_id = int(message.content.split(" ")[1].strip())
@@ -127,7 +116,6 @@ async def on_message(message):
         else:
             await message.channel.send(f"⚠️ Roblox ID `{target_id}` is not in the list.")
 
-    # .replace Command
     elif message.content.startswith(".replace"):
         try:
             _, old_id, new_id = message.content.split(" ")
@@ -143,7 +131,6 @@ async def on_message(message):
         else:
             await message.channel.send(f"⚠️ Roblox ID `{old_id}` not found in the list.")
 
-    # .list Command
     elif message.content.startswith(".list"):
         if not existing_ids:
             embed = discord.Embed(
@@ -167,7 +154,6 @@ async def on_message(message):
 
         await message.channel.send(embed=embed)
 
-    # .check Command
     elif message.content.startswith(".check"):
         try:
             target_id = int(message.content.split(" ")[1].strip())
@@ -180,12 +166,9 @@ async def on_message(message):
         else:
             await message.channel.send(f"❌ Roblox ID `{target_id}` **is not premium**.")
 
-    # Update the Lua content
     updated_lua_content = f"getgenv().ownerIDs = {{{', '.join(map(str, existing_ids))}}}\nreturn getgenv().ownerIDs"
 
-    # Update the file on GitHub
     update_github_file(updated_lua_content, file_data["sha"])
 
-# Run the Discord bot
 keep_alive()
 client.run(DISCORD_TOKEN)

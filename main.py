@@ -4,6 +4,7 @@ import json
 import base64
 import re
 import os  # To access environment variables
+from dotenv import load_dotenv
 from keep_alive import keep_alive
 
 load_dotenv()

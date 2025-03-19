@@ -52,7 +52,7 @@ def get_roblox_usernames(user_ids):
     try:
         response = requests.post(url, json=data)
         if response.status_code == 200:
-            return {user['id']: user['name'] for user in response.json()['data']}
+            return {user['id']: (user['name'], f"https://www.roblox.com/headshot-thumbnail/image?userId={user['id']}&width=420&height=420&format=png") for user in response.json()['data']}
         else:
             return {}
     except Exception as e:
@@ -108,6 +108,8 @@ async def on_message(message):
                 description=f"**{target_id}** - **{username}** has been added to the whitelist.",
                 color=discord.Color.blue()
             )
+            if profile_image:
+                embed.set_thumbnail(url=profile_image)
             await message.channel.send(embed=embed)
 
     elif message.content.startswith(".remove "):

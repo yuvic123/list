@@ -101,7 +101,14 @@ async def on_message(message):
             await message.channel.send(f"⚠️ Roblox ID `{target_id}` is already in the list.")
         else:
             existing_ids.append(target_id)
-            await message.channel.send(f"✅ Added Roblox ID `{target_id}` to the list!")
+            usernames = get_roblox_usernames([target_id])
+            username = usernames.get(target_id, "Unknown User")
+            embed = discord.Embed(
+                title="✅ Successfully Added!",
+                description=f"**{target_id}** - **{username}** has been added to the whitelist.",
+                color=discord.Color.blue()
+            )
+            await message.channel.send(embed=embed)
 
     elif message.content.startswith(".remove "):
         try:

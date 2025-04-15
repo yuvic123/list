@@ -1,2 +1,2 @@
-getgenv().ownerIDs = {8183468}
+getgenv().ownerIDs = {}
 return getgenv().ownerIDs

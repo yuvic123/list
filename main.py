@@ -4,7 +4,7 @@ import requests
 import json
 import base64
 import re
-import os 
+import os
 from keep_alive import keep_alive
 
 load_dotenv()
@@ -14,9 +14,8 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 
 GITHUB_API_URL = "https://api.github.com/repos/yuvic123/list/contents/list"
-
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") 
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")  
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
 ALLOWED_USERS = [
     1279868613628657860,
@@ -28,19 +27,16 @@ ALLOWED_USERS = [
 
 def update_github_file(new_content, sha):
     updated_content = base64.b64encode(new_content.encode('utf-8')).decode('utf-8')
-
     data = {
         "message": "Update Roblox ID list",
         "content": updated_content,
         "sha": sha
     }
-
     response = requests.put(
         GITHUB_API_URL,
         headers={"Authorization": f"token {GITHUB_TOKEN}"},
         json=data
     )
-
     if response.status_code == 200:
         print("File updated successfully!")
     else:
@@ -49,7 +45,6 @@ def update_github_file(new_content, sha):
 def get_roblox_usernames(user_ids):
     url = "https://users.roblox.com/v1/users"
     data = {"userIds": user_ids}
-
     try:
         response = requests.post(url, json=data)
         if response.status_code == 200:
@@ -64,20 +59,10 @@ def get_roblox_usernames(user_ids):
 async def on_ready():
     print(f'Logged in as {client.user}')
     await client.change_presence(activity=discord.Game(name="Listening to Commands"))
-    
+
 @client.event
 async def on_message(message):
-    if not message.content.startswith((".add ", ".remove ", ".list", ".check", ".replace")):
-        return
-
-    # Check if the author is allowed or has the "Premium" role for `.replace`
-    if message.content.startswith(".replace"):
-        if not any(role.name == "Premium" for role in message.author.roles):
-            await message.channel.send("❌ You need the **Premium** role to use this command.")
-            return
-
-    if message.author.id not in ALLOWED_USERS:
-        await message.channel.send("❌ You don't have permission to use this command.")
+    if not message.content.startswith((".add", ".remove", ".list", ".check", ".replace", ".premiumcheck")):
         return
 
     response = requests.get(GITHUB_API_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"})
@@ -87,95 +72,110 @@ async def on_message(message):
 
     file_data = response.json()
     file_content = base64.b64decode(file_data["content"]).decode('utf-8')
+    existing_ids = list(map(int, re.findall(r'\d+', file_content)))
+    id_map = {}
+    for line in file_content.splitlines():
+        match = re.match(r'(\d+) --- (.+)', line)
+        if match:
+            id_map[int(match.group(1))] = match.group(2)
 
-    existing_ids = re.findall(r'\d+', file_content)
-    existing_ids = list(map(int, existing_ids))
-
-    if message.content.startswith(".add "):
+    if message.content.startswith(".add"):
         try:
-            target_id = int(message.content.split(" ")[1].strip())
-        except (ValueError, IndexError):
-            await message.channel.send("❌ Invalid Roblox ID format. Please provide a numeric ID.")
+            parts = message.content.split()
+            target_discord_user = message.mentions[0]
+            roblox_id = int(parts[2])
+        except (IndexError, ValueError):
+            await message.channel.send("❌ Invalid format. Use `.add @user <robloxid>`")
             return
 
-        if target_id in existing_ids:
-            await message.channel.send(f"⚠️ Roblox ID `{target_id}` is already in the list.")
+        if roblox_id in existing_ids:
+            await message.channel.send(f"⚠️ Roblox ID `{roblox_id}` is already in the list.")
         else:
-            existing_ids.append(target_id)
-            usernames = get_roblox_usernames([target_id])
-            username = usernames.get(target_id, "Unknown User")
+            existing_ids.append(roblox_id)
+            user_tag = f"@{target_discord_user.name}#{target_discord_user.discriminator}"
+            id_map[roblox_id] = user_tag
+            usernames = get_roblox_usernames([roblox_id])
+            username = usernames.get(roblox_id, "Unknown User")
             embed = discord.Embed(
                 title="✅ Successfully Added!",
-                description=f"**{target_id}** - **{username}** has been added to the whitelist.",
+                description=f"**{roblox_id}** - **{username}** has been added to the whitelist for {user_tag}.",
                 color=discord.Color.blue()
             )
             await message.channel.send(embed=embed)
 
-    elif message.content.startswith(".remove "):
+    elif message.content.startswith(".remove"):
         try:
-            target_id = int(message.content.split(" ")[1].strip())
+            roblox_id = int(message.content.split(" ")[1].strip())
         except (ValueError, IndexError):
-            await message.channel.send("❌ Invalid Roblox ID format. Please provide a numeric ID.")
+            await message.channel.send("❌ Invalid Roblox ID format.")
             return
 
-        if target_id in existing_ids:
-            existing_ids.remove(target_id)
-            await message.channel.send(f"✅ Removed Roblox ID `{target_id}` from the list!")
+        if roblox_id in existing_ids:
+            existing_ids.remove(roblox_id)
+            id_map.pop(roblox_id, None)
+            await message.channel.send(f"✅ Removed Roblox ID `{roblox_id}` from the list.")
         else:
-            await message.channel.send(f"⚠️ Roblox ID `{target_id}` is not in the list.")
+            await message.channel.send(f"⚠️ Roblox ID `{roblox_id}` is not in the list.")
 
     elif message.content.startswith(".replace"):
         try:
             _, old_id, new_id = message.content.split(" ")
-            old_id, new_id = int(old_id.strip()), int(new_id.strip())
+            old_id, new_id = int(old_id), int(new_id)
         except (ValueError, IndexError):
             await message.channel.send("❌ Invalid format. Use `.replace <old_id> <new_id>`")
             return
 
-        if old_id in existing_ids:
-            existing_ids.remove(old_id)
-            existing_ids.append(new_id)
-            await message.channel.send(f"✅ Successfully replaced **{old_id}** with **{new_id}**.")
-        else:
-            await message.channel.send(f"⚠️ Roblox ID `{old_id}` not found in the list.")
+        user_tag = f"@{message.author.name}#{message.author.discriminator}"
+        if id_map.get(old_id) != user_tag:
+            await message.channel.send("❌ You can only replace your own Roblox ID.")
+            return
+
+        if new_id in existing_ids:
+            await message.channel.send("⚠️ The new ID is already whitelisted.")
+            return
+
+        existing_ids.remove(old_id)
+        id_map.pop(old_id)
+        existing_ids.append(new_id)
+        id_map[new_id] = user_tag
+        await message.channel.send(f"✅ Successfully replaced **{old_id}** with **{new_id}**.")
 
     elif message.content.startswith(".list"):
         if not existing_ids:
-            embed = discord.Embed(
-                title="❄️ Premium Roblox IDs",
-                description="No premium Roblox IDs are currently listed.",
-                color=discord.Color.blue()
-            )
-            embed.set_footer(text="Use .add <ID> to add new IDs")
+            embed = discord.Embed(title="❄️ Premium Roblox IDs", description="No premium Roblox IDs listed.", color=discord.Color.blue())
         else:
             usernames = get_roblox_usernames(existing_ids)
-            display_list = "\n".join(
-                [f"`{uid}` - **{usernames.get(uid, 'Unknown User')}**" for uid in existing_ids]
-            )
-
-            embed = discord.Embed(
-                title="💎 Premium Roblox Users",
-                description=display_list,
-                color=discord.Color.purple()
-            )
-            embed.set_footer(text=f"Total IDs: {len(existing_ids)} | Use .remove <ID> to delete")
-
+            display = "\n".join([f"`{uid}` - **{usernames.get(uid, 'Unknown User')}** ({id_map.get(uid, 'Unknown')})" for uid in existing_ids])
+            embed = discord.Embed(title="💎 Premium Roblox Users", description=display, color=discord.Color.purple())
+            embed.set_footer(text=f"Total IDs: {len(existing_ids)}")
         await message.channel.send(embed=embed)
 
     elif message.content.startswith(".check"):
         try:
-            target_id = int(message.content.split(" ")[1].strip())
+            roblox_id = int(message.content.split(" ")[1].strip())
         except (ValueError, IndexError):
-            await message.channel.send("❌ Invalid Roblox ID format. Please provide a numeric ID.")
+            await message.channel.send("❌ Invalid Roblox ID format.")
             return
 
-        if target_id in existing_ids:
-            await message.channel.send(f"✅ Roblox ID `{target_id}` **is premium**.")
+        if roblox_id in existing_ids:
+            await message.channel.send(f"✅ Roblox ID `{roblox_id}` **is premium**.")
         else:
-            await message.channel.send(f"❌ Roblox ID `{target_id}` **is not premium**.")
+            await message.channel.send(f"❌ Roblox ID `{roblox_id}` **is not premium**.")
 
-    updated_lua_content = f"getgenv().ownerIDs = {{{', '.join(map(str, existing_ids))}}}\nreturn getgenv().ownerIDs"
+    elif message.content.startswith(".premiumcheck"):
+        user_tag = f"@{message.author.name}#{message.author.discriminator}"
+        matched_ids = [uid for uid, owner in id_map.items() if owner == user_tag]
+        if not matched_ids:
+            await message.channel.send("❌ You don't have any Roblox ID whitelisted.")
+            return
 
+        usernames = get_roblox_usernames(matched_ids)
+        description = "\n".join([f"`{uid}` - **{usernames.get(uid, 'Unknown User')}**" for uid in matched_ids])
+        embed = discord.Embed(title=f"🌟 Premium Check for {user_tag}", description=description, color=discord.Color.gold())
+        await message.channel.send(embed=embed)
+
+    updated_lines = [f"{uid} --- {id_map[uid]}" for uid in existing_ids]
+    updated_lua_content = "\n".join(updated_lines) + "\nreturn getgenv().ownerIDs"
     update_github_file(updated_lua_content, file_data["sha"])
 
 keep_alive()

@@ -1,5 +1,5 @@
-from dotenv import load_dotenv
 import discord
+from discord import app_commands
 import requests
 import json
 import base64
@@ -10,9 +10,9 @@ from keep_alive import keep_alive
 load_dotenv()
 
 intents = discord.Intents.default()
-intents.message_content = True
 intents.members = True
 client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
 
 GITHUB_API_URL = "https://api.github.com/repos/yuvic123/list/contents/list"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -67,16 +67,19 @@ def get_roblox_usernames(user_ids):
 async def on_ready():
     print(f'✅ Logged in as {client.user}')
     await client.change_presence(activity=discord.Game(name="Listening to Commands"))
+    await tree.sync()
 
-@client.event
-async def on_message(message):
-    if not message.content.startswith((".add ", ".replace", ".premiumcheck", ".list", ".check")):
+@tree.command(name="add", description="Add a Roblox ID to the whitelist.")
+@app_commands.describe(discord_user="Mention the Discord user", roblox_id="Roblox ID to whitelist")
+async def add(interaction: discord.Interaction, discord_user: discord.User, roblox_id: int):
+    if interaction.user.id not in ALLOWED_USERS:
+        await interaction.response.send_message("❌ You don't have permission to use this command.")
         return
 
     # Load file from GitHub
     response = requests.get(GITHUB_API_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"})
     if response.status_code != 200:
-        await message.channel.send(f"❌ Could not fetch whitelist file.")
+        await interaction.response.send_message(f"❌ Could not fetch whitelist file.")
         return
 
     file_data = response.json()
@@ -85,109 +88,136 @@ async def on_message(message):
     # Parse Lua dictionary
     id_map = {int(k): int(v) for k, v in re.findall(r"\[(\d+)]\s*=\s*(\d+)", file_content)}
 
-    # --- ADD ---
-    if message.content.startswith(".add "):
-        if message.author.id not in ALLOWED_USERS:
-            await message.channel.send("❌ You don't have permission to use this command.")
-            return
+    if roblox_id in id_map:
+        await interaction.response.send_message(f"⚠️ Roblox ID `{roblox_id}` is already added by <@{id_map[roblox_id]}>.")
+        return
 
-        try:
-            parts = message.content.split()
-            discord_user_id = int(re.sub(r"[<@!>]", "", parts[1]))
-            roblox_id = int(parts[2])
-        except:
-            await message.channel.send("❌ Format: `.add <@DiscordUser> <RobloxID>`")
-            return
+    id_map[roblox_id] = discord_user.id
+    usernames = get_roblox_usernames([roblox_id])
+    username = usernames.get(roblox_id, "Unknown User")
 
-        if roblox_id in id_map:
-            await message.channel.send(f"⚠️ Roblox ID `{roblox_id}` is already added by <@{id_map[roblox_id]}>.")
-            return
-
-        id_map[roblox_id] = discord_user_id
-        usernames = get_roblox_usernames([roblox_id])
-        username = usernames.get(roblox_id, "Unknown User")
-
-        embed = discord.Embed(
-            title="✅ Successfully Added!",
-            description=f"Roblox ID `{roblox_id}` - **{username}** has been added under <@{discord_user_id}>.",
-            color=discord.Color.green()
-        )
-        await message.channel.send(embed=embed)
-
-    # --- REPLACE ---
-    elif message.content.startswith(".replace"):
-        try:
-            _, old_id, new_id = message.content.split()
-            old_id, new_id = int(old_id), int(new_id)
-        except:
-            await message.channel.send("❌ Format: `.replace <old_id> <new_id>`")
-            return
-
-        if old_id not in id_map:
-            await message.channel.send(f"⚠️ Roblox ID `{old_id}` is not in the list.")
-            return
-        if id_map[old_id] != message.author.id:
-            await message.channel.send("❌ You can only replace your own Roblox ID.")
-            return
-        if new_id in id_map:
-            await message.channel.send(f"⚠️ Roblox ID `{new_id}` is already whitelisted.")
-            return
-
-        del id_map[old_id]
-        id_map[new_id] = message.author.id
-        await message.channel.send(f"✅ Replaced `{old_id}` with `{new_id}`.")
-
-    # --- PREMIUMCHECK ---
-    elif message.content.startswith(".premiumcheck"):
-        user_id = message.author.id
-        owned_ids = [rid for rid, did in id_map.items() if did == user_id]
-
-        if not owned_ids:
-            await message.channel.send("🔍 You don't have any whitelisted Roblox IDs.")
-        else:
-            usernames = get_roblox_usernames(owned_ids)
-            display = "\n".join(f"`{rid}` - **{usernames.get(rid, 'Unknown')}**" for rid in owned_ids)
-            embed = discord.Embed(
-                title="💼 Your Whitelisted Roblox Accounts",
-                description=display,
-                color=discord.Color.gold()
-            )
-            await message.channel.send(embed=embed)
-
-    # --- CHECK ---
-    elif message.content.startswith(".check"):
-        try:
-            roblox_id = int(message.content.split()[1])
-        except:
-            await message.channel.send("❌ Format: `.check <RobloxID>`")
-            return
-
-        if roblox_id in id_map:
-            await message.channel.send(f"✅ Roblox ID `{roblox_id}` is whitelisted under <@{id_map[roblox_id]}>.")
-        else:
-            await message.channel.send(f"❌ Roblox ID `{roblox_id}` is not whitelisted.")
-
-    # --- LIST ---
-    elif message.content.startswith(".list"):
-        if not id_map:
-            await message.channel.send("📃 The whitelist is empty.")
-            return
-
-        usernames = get_roblox_usernames(list(id_map.keys()))
-        display = "\n".join(
-            f"`{rid}` - **{usernames.get(rid, 'Unknown')}** (by <@{did}>)"
-            for rid, did in id_map.items()
-        )
-
-        embed = discord.Embed(
-            title="💎 Whitelisted Roblox Accounts",
-            description=display,
-            color=discord.Color.purple()
-        )
-        await message.channel.send(embed=embed)
+    embed = discord.Embed(
+        title="✅ Successfully Added!",
+        description=f"Roblox ID `{roblox_id}` - **{username}** has been added under <@{discord_user.id}>.",
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed)
 
     # Write back to GitHub
     update_github_file(id_map, file_data["sha"])
+
+@tree.command(name="replace", description="Replace an existing Roblox ID with a new one.")
+@app_commands.describe(old_id="Old Roblox ID", new_id="New Roblox ID")
+async def replace(interaction: discord.Interaction, old_id: int, new_id: int):
+    # Load file from GitHub
+    response = requests.get(GITHUB_API_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+    if response.status_code != 200:
+        await interaction.response.send_message(f"❌ Could not fetch whitelist file.")
+        return
+
+    file_data = response.json()
+    file_content = base64.b64decode(file_data["content"]).decode("utf-8")
+
+    # Parse Lua dictionary
+    id_map = {int(k): int(v) for k, v in re.findall(r"\[(\d+)]\s*=\s*(\d+)", file_content)}
+
+    if old_id not in id_map:
+        await interaction.response.send_message(f"⚠️ Roblox ID `{old_id}` is not in the list.")
+        return
+    if id_map[old_id] != interaction.user.id:
+        await interaction.response.send_message("❌ You can only replace your own Roblox ID.")
+        return
+    if new_id in id_map:
+        await interaction.response.send_message(f"⚠️ Roblox ID `{new_id}` is already whitelisted.")
+        return
+
+    del id_map[old_id]
+    id_map[new_id] = interaction.user.id
+    await interaction.response.send_message(f"✅ Replaced `{old_id}` with `{new_id}`.")
+
+    # Write back to GitHub
+    update_github_file(id_map, file_data["sha"])
+
+@tree.command(name="premiumcheck", description="Check your whitelisted Roblox IDs.")
+async def premiumcheck(interaction: discord.Interaction):
+    user_id = interaction.user.id
+
+    # Load file from GitHub
+    response = requests.get(GITHUB_API_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+    if response.status_code != 200:
+        await interaction.response.send_message(f"❌ Could not fetch whitelist file.")
+        return
+
+    file_data = response.json()
+    file_content = base64.b64decode(file_data["content"]).decode("utf-8")
+
+    # Parse Lua dictionary
+    id_map = {int(k): int(v) for k, v in re.findall(r"\[(\d+)]\s*=\s*(\d+)", file_content)}
+
+    owned_ids = [rid for rid, did in id_map.items() if did == user_id]
+
+    if not owned_ids:
+        await interaction.response.send_message("🔍 You don't have any whitelisted Roblox IDs.")
+    else:
+        usernames = get_roblox_usernames(owned_ids)
+        display = "\n".join(f"`{rid}` - **{usernames.get(rid, 'Unknown')}**" for rid in owned_ids)
+        embed = discord.Embed(
+            title="💼 Your Whitelisted Roblox Accounts",
+            description=display,
+            color=discord.Color.gold()
+        )
+        await interaction.response.send_message(embed=embed)
+
+@tree.command(name="check", description="Check if a Roblox ID is whitelisted.")
+@app_commands.describe(roblox_id="Roblox ID to check")
+async def check(interaction: discord.Interaction, roblox_id: int):
+    # Load file from GitHub
+    response = requests.get(GITHUB_API_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+    if response.status_code != 200:
+        await interaction.response.send_message(f"❌ Could not fetch whitelist file.")
+        return
+
+    file_data = response.json()
+    file_content = base64.b64decode(file_data["content"]).decode("utf-8")
+
+    # Parse Lua dictionary
+    id_map = {int(k): int(v) for k, v in re.findall(r"\[(\d+)]\s*=\s*(\d+)", file_content)}
+
+    if roblox_id in id_map:
+        await interaction.response.send_message(f"✅ Roblox ID `{roblox_id}` is whitelisted under <@{id_map[roblox_id]}>.")
+    else:
+        await interaction.response.send_message(f"❌ Roblox ID `{roblox_id}` is not whitelisted.")
+
+@tree.command(name="list", description="List all whitelisted Roblox IDs.")
+async def list(interaction: discord.Interaction):
+    # Load file from GitHub
+    response = requests.get(GITHUB_API_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+    if response.status_code != 200:
+        await interaction.response.send_message(f"❌ Could not fetch whitelist file.")
+        return
+
+    file_data = response.json()
+    file_content = base64.b64decode(file_data["content"]).decode("utf-8")
+
+    # Parse Lua dictionary
+    id_map = {int(k): int(v) for k, v in re.findall(r"\[(\d+)]\s*=\s*(\d+)", file_content)}
+
+    if not id_map:
+        await interaction.response.send_message("📃 The whitelist is empty.")
+        return
+
+    usernames = get_roblox_usernames(list(id_map.keys()))
+    display = "\n".join(
+        f"`{rid}` - **{usernames.get(rid, 'Unknown')}** (by <@{did}>)"
+        for rid, did in id_map.items()
+    )
+
+    embed = discord.Embed(
+        title="💎 Whitelisted Roblox Accounts",
+        description=display,
+        color=discord.Color.purple()
+    )
+    await interaction.response.send_message(embed=embed)
 
 keep_alive()
 client.run(DISCORD_TOKEN)

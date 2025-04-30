@@ -73,7 +73,6 @@ async def on_message(message):
     if not message.content.startswith((".add ", ".replace", ".premiumcheck", ".list", ".check")):
         return
 
-    # Load file from GitHub
     response = requests.get(GITHUB_API_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"})
     if response.status_code != 200:
         await message.channel.send(f"❌ Could not fetch whitelist file.")
@@ -81,11 +80,8 @@ async def on_message(message):
 
     file_data = response.json()
     file_content = base64.b64decode(file_data["content"]).decode("utf-8")
+    id_map = {int(k): int(v) for k, v in re.findall(r"\\[(\\d+)]\\s*=\\s*(\\d+)", file_content)}
 
-    # Parse Lua dictionary
-    id_map = {int(k): int(v) for k, v in re.findall(r"\[(\d+)]\s*=\s*(\d+)", file_content)}
-
-    # --- ADD ---
     if message.content.startswith(".add "):
         if message.author.id not in ALLOWED_USERS:
             await message.channel.send("❌ You don't have permission to use this command.")
@@ -114,7 +110,6 @@ async def on_message(message):
         )
         await message.channel.send(embed=embed)
 
-    # --- REPLACE ---
     elif message.content.startswith(".replace"):
         try:
             _, old_id, new_id = message.content.split()
@@ -137,24 +132,28 @@ async def on_message(message):
         id_map[new_id] = message.author.id
         await message.channel.send(f"✅ Replaced `{old_id}` with `{new_id}`.")
 
-    # --- PREMIUMCHECK ---
     elif message.content.startswith(".premiumcheck"):
-        user_id = message.author.id
-        owned_ids = [rid for rid, did in id_map.items() if did == user_id]
+        target = message.mentions[0] if message.mentions else message.author
+        user_ids = [rid for rid, did in id_map.items() if did == target.id]
 
-        if not owned_ids:
-            await message.channel.send("🔍 You don't have any whitelisted Roblox IDs.")
-        else:
-            usernames = get_roblox_usernames(owned_ids)
-            display = "\n".join(f"`{rid}` - **{usernames.get(rid, 'Unknown')}**" for rid in owned_ids)
-            embed = discord.Embed(
-                title="💼 Your Whitelisted Roblox Accounts",
-                description=display,
-                color=discord.Color.gold()
-            )
-            await message.channel.send(embed=embed)
+        if not user_ids:
+            await message.channel.send(f"❄️ {target.mention} has no premium Roblox accounts whitelisted.")
+            return
 
-    # --- CHECK ---
+        usernames = get_roblox_usernames(user_ids)
+        embed = discord.Embed(
+            title=f"💎 {target.display_name}'s Premium Roblox IDs",
+            description="\n".join([f"`{rid}` - **{usernames.get(rid, 'Unknown')}**" for rid in user_ids]),
+            color=discord.Color.gold()
+        )
+
+        first_id = user_ids[0]
+        avatar_url = f"https://thumbnails.roblox.com/v1/users/avatar?userIds={first_id}&size=720x720&format=Png&isCircular=false"
+        embed.set_image(url=avatar_url)
+        embed.set_footer(text=f"Total Premium IDs: {len(user_ids)}")
+
+        await message.channel.send(embed=embed)
+
     elif message.content.startswith(".check"):
         try:
             roblox_id = int(message.content.split()[1])
@@ -167,7 +166,6 @@ async def on_message(message):
         else:
             await message.channel.send(f"❌ Roblox ID `{roblox_id}` is not whitelisted.")
 
-    # --- LIST ---
     elif message.content.startswith(".list"):
         if not id_map:
             await message.channel.send("📃 The whitelist is empty.")
@@ -186,7 +184,6 @@ async def on_message(message):
         )
         await message.channel.send(embed=embed)
 
-    # Write back to GitHub
     update_github_file(id_map, file_data["sha"])
 
 keep_alive()

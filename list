@@ -1,4 +1,5 @@
 getgenv().ownerIDs = {
     [1231241] = 598460565387476992,
+    [156124] = 1279868613628657860,
 }
 return getgenv().ownerIDs

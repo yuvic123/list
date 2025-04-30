@@ -107,16 +107,6 @@ async def on_message(message):
         usernames = get_roblox_usernames([roblox_id])
         username = usernames.get(roblox_id, "Unknown User")
 
-        # Add Premium role
-        guild = message.guild
-        member = guild.get_member(discord_user_id)
-        if member:
-            premium_role = discord.utils.get(guild.roles, name="Premium")
-            if premium_role:
-                await member.add_roles(premium_role)
-            else:
-                await message.channel.send("⚠️ 'Premium' role not found. Please create one.")
-
         embed = discord.Embed(
             title="✅ Successfully Added!",
             description=f"Roblox ID `{roblox_id}` - **{username}** has been added under <@{discord_user_id}>.",

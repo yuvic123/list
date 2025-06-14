@@ -5,7 +5,6 @@ import json
 import base64
 import re
 import os
-from keep_alive import keep_alive
 
 load_dotenv()
 
@@ -189,5 +188,4 @@ async def on_message(message):
     # Write back to GitHub
     update_github_file(id_map, file_data["sha"])
 
-keep_alive()
 client.run(DISCORD_TOKEN)

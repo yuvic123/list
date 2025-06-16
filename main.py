@@ -5,6 +5,28 @@ import json
 import base64
 import re
 import os
+from flask import Flask
+import threading
+
+load_dotenv()
+
+app = Flask(__name__)
+
+@app.route("/healthz")
+def healthz():
+    return "OK", 200
+
+def run_health():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+threading.Thread(target=run_health).start()
+
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+client = discord.Client(intents=intents)
+
 load_dotenv()
 intents = discord.Intents.default()
 intents.message_content = True

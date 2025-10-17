@@ -38,7 +38,6 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 ALLOWED_USERS = [
     1279868613628657860,
     598460565387476992,
-    1272478153201422420,
     1197823319123165218,
     835401509373476885
 ]
@@ -173,3 +172,4 @@ async def on_message(message):
         await message.channel.send(embed=embed)
     update_github_file(id_map, file_data["sha"])
 client.run(DISCORD_TOKEN)
+
